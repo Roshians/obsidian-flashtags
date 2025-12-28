@@ -1,10 +1,10 @@
 {
-	"id": "obsidian-ai-tagger",
-	"name": "AI Auto Tagger",
-	"version": "1.0.0",
+	"id": "obsidian-flashtags",
+	"name": "FlashTags",
+	"version": "1.0.1",
 	"minAppVersion": "0.15.0",
-	"description": "Automatically generates tags for notes using AI.",
-	"author": "YourName",
+	"description": "Auto-generate tags and metadata using Google Gemini. Fast, intelligent organization for your vault.",
+	"author": "Roshians",
 	"authorUrl": "https://github.com/roshians",
 	"isDesktopOnly": false
 }

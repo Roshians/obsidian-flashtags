@@ -1,7 +1,7 @@
 import { App, Editor, MarkdownView, Notice, Plugin, PluginSettingTab, Setting, requestUrl } from 'obsidian';
 
 // Configuration Constants
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-2.5-flash'; 
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 // 1. Settings Definition
@@ -13,22 +13,42 @@ const DEFAULT_SETTINGS: GeminiTaggerSettings = {
 	apiKey: ''
 }
 
+type Mode = 'tags' | 'summary' | 'all';
+
 export default class GeminiTaggerPlugin extends Plugin {
 	settings: GeminiTaggerSettings;
 
 	async onload() {
 		await this.loadSettings();
 
-		// Command: Trigger the AI generation
+		// Command 1: Generate Tags Only
 		this.addCommand({
-			id: 'generate-tags-gemini',
+			id: 'flashtags-generate-tags',
 			name: 'Generate Tags',
 			editorCallback: (editor: Editor, view: MarkdownView) => {
-				this.generateTags(editor);
+				this.processNote(view, 'tags');
 			}
 		});
 
-		// Settings Tab: For API Key entry
+		// Command 2: Generate Summary Only
+		this.addCommand({
+			id: 'flashtags-generate-summary',
+			name: 'Generate Summary',
+			editorCallback: (editor: Editor, view: MarkdownView) => {
+				this.processNote(view, 'summary');
+			}
+		});
+
+		// Command 3: Generate All Metadata
+		this.addCommand({
+			id: 'flashtags-generate-all',
+			name: 'Generate Metadata (Tags + Summary)',
+			editorCallback: (editor: Editor, view: MarkdownView) => {
+				this.processNote(view, 'all');
+			}
+		});
+
+		// Settings Tab
 		this.addSettingTab(new GeminiTaggerSettingTab(this.app, this));
 	}
 
@@ -41,64 +61,137 @@ export default class GeminiTaggerPlugin extends Plugin {
 	}
 
 	/**
-	 * Main Logic: Sends note content to Gemini and appends tags.
+	 * Core Logic: Handles Prompt Generation & Frontmatter Update based on Mode.
 	 */
-	async generateTags(editor: Editor) {
-		const noteContent = editor.getValue();
+	async processNote(view: MarkdownView, mode: Mode) {
+		const noteContent = view.editor.getValue();
 		
 		// Validation
 		if (!this.settings.apiKey) {
-			new Notice('❌ Please enter your Gemini API Key in settings.');
+			new Notice('❌ FlashTags: Please enter API Key in settings.');
 			return;
 		}
 		if (!noteContent.trim()) {
-			new Notice('⚠️ Note is empty. Write something first!');
+			new Notice('⚠️ Note is empty.');
 			return;
 		}
 
-		new Notice('✨ Generating tags...');
+		// User Feedback
+		let actionText = 'Analyzing...';
+		if (mode === 'tags') actionText = 'Generating Tags...';
+		if (mode === 'summary') actionText = 'Summarizing...';
+		if (mode === 'all') actionText = 'Generating Metadata...';
+		
+		new Notice(`⚡ FlashTags: ${actionText}`);
 
 		try {
+			// 1. Construct the specific Prompt based on Mode
+			let instruction = '';
+			if (mode === 'tags') {
+				instruction = `Identify 3-6 highly relevant tags.
+				- Format: lowercase, kebab-case (e.g. "data-structures").
+				- Convert symbols to text based on context (e.g. "cpp" for "C++", "c-sharp" for "C#").
+				- Priority: Specific technical concepts (languages, libraries) over generic verbs.
+				- No hashtags (#).
+				Return JSON: { "tags": ["tag1", "tag2"] }`;
+			} else if (mode === 'summary') {
+				instruction = `Write a concise 1-sentence summary capturing the core concept. Return JSON: { "summary": "Your summary here." }`;
+			} else {
+				instruction = `Identify 3-6 relevant tags (lowercase, kebab-case, convert symbols like "cpp") AND a concise 1-sentence summary.
+				Return JSON: { "tags": [], "summary": "" }`;
+			}
+
+			const prompt = `
+				Analyze this note content.
+				${instruction}
+				Output valid JSON ONLY. No markdown formatting.
+
+				Note Content:
+				${noteContent.substring(0, 10000)}
+			`;
+
+			// 2. Call Gemini API
 			const response = await requestUrl({
 				url: `${API_URL}?key=${this.settings.apiKey}`,
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					contents: [{
-						parts: [{
-							// Optimized Prompt for strictly formatted tags
-							text: `Analyze the following note and identify the 3-6 most relevant topics.
-							Output ONLY the tags as hashtags separated by spaces (e.g. #productivity #finance #ideas).
-							Do not use markdown bolding. Do not add introductory text.
-							
-							Note Content:
-							${noteContent.substring(0, 10000)}` 
-						}]
-					}]
+					contents: [{ parts: [{ text: prompt }] }]
 				})
 			});
 
 			const data = response.json;
 			
 			if (data.candidates && data.candidates.length > 0) {
-				const generatedTags = data.candidates[0].content.parts[0].text.trim();
-				
-				// Append to the end of the file with a clean newline separator
-				editor.setCursor(editor.lastLine());
-				editor.replaceSelection(`\n\n${generatedTags}`);
-				new Notice('✅ Tags added!');
+				let rawText = data.candidates[0].content.parts[0].text.trim();
+				rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+
+				try {
+					const aiResponse = JSON.parse(rawText);
+
+					if (!view.file) {
+						new Notice('❌ No file detected.');
+						return;
+					}
+
+					// 3. Update Frontmatter
+					await this.app.fileManager.processFrontMatter(view.file, (frontmatter) => {
+						
+						// Update TAGS (if requested)
+						if (mode === 'tags' || mode === 'all') {
+							if (aiResponse.tags) {
+								if (!frontmatter['tags']) frontmatter['tags'] = [];
+								let existingTags = frontmatter['tags'];
+								if (typeof existingTags === 'string') existingTags = [existingTags];
+								if (!Array.isArray(existingTags)) existingTags = [];
+
+								aiResponse.tags.forEach((tag: string) => {
+									// Refined Sanitizer: 
+                                    // 1. Lowercase
+                                    // 2. Spaces -> Dashes
+                                    // 3. Remove all EXCEPT words, numbers, dashes, underscores, and forward slashes (/)
+									let cleanTag = tag.toLowerCase()
+										.replace(/\s+/g, '-')
+										.replace(/[^\w\-/]/g, ''); 
+									
+                                    // 4. Handle pure numeric tags (e.g. 2024 -> n2024)
+                                    if (/^\d+$/.test(cleanTag)) {
+                                        cleanTag = 'n' + cleanTag;
+                                    }
+
+									if (cleanTag && !existingTags.includes(cleanTag)) {
+										existingTags.push(cleanTag);
+									}
+								});
+								frontmatter['tags'] = existingTags;
+							}
+						}
+
+						// Update SUMMARY (if requested)
+						if (mode === 'summary' || mode === 'all') {
+							if (aiResponse.summary) {
+								frontmatter['summary'] = aiResponse.summary;
+							}
+						}
+					});
+
+					new Notice('✅ Updated!');
+				} catch (jsonError) {
+					console.error("JSON Error:", jsonError);
+					new Notice('❌ Failed to parse AI response.');
+				}
 			} else {
 				new Notice('⚠️ AI returned no results.');
 			}
 
 		} catch (error) {
 			console.error("Gemini Plugin Error:", error);
-			new Notice('❌ Connection failed. Check your API Key or Internet.');
+			new Notice('❌ Connection failed.');
 		}
 	}
 }
 
-// 2. Settings Tab UI
+// Settings Tab UI
 class GeminiTaggerSettingTab extends PluginSettingTab {
 	plugin: GeminiTaggerPlugin;
 

@@ -1,15 +1,25 @@
 {
-	"name": "obsidian-sample-plugin",
-	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"name": "obsidian-flashtags",
+	"version": "1.0.1",
+	"description": "Auto-generate tags and metadata using Google Gemini. Fast, intelligent organization for your vault.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-		"version": "node version-bump.mjs && git add manifest.json versions.json"
+		"version": "node version-bump.mjs && git add manifest.json versions.json",
+		"lint": "eslint . --ext .ts"
 	},
-	"keywords": [],
-	"author": "",
+	"keywords": [
+		"obsidian",
+		"obsidian-plugin",
+		"ai",
+		"tagging",
+		"metadata",
+		"frontmatter",
+		"gemini",
+		"productivity"
+	],
+	"author": "Roshians",
 	"license": "MIT",
 	"devDependencies": {
 		"@types/node": "^16.11.6",
