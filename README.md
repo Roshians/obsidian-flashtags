@@ -6,7 +6,7 @@ Stop organizing manually. Let FlashTags handle the metadata.
 
 ## ✨ Features
 
-- **⚡ Instant Tagging**: Powered by Gemini 1.5 Flash for sub-second responses.
+- **⚡ Instant Tagging**: Powered by Gemini 2.5 Flash for sub-second responses.
 - **🧠 Smart Frontmatter**: Automatically injects tags and metadata into your note's YAML header.
 - **📄 Context-Aware**: Reads up to 10,000 characters of your note to ensure accuracy.
 - **💸 Free Tier Friendly**: Designed to work within Google's free API limits.
@@ -15,12 +15,18 @@ Stop organizing manually. Let FlashTags handle the metadata.
 
 ## 🚀 How to Use
 
-1. **Open a Note**: Navigate to any note.
-2. **Run the Command**: 
-   - Press `Ctrl+P` (or `Cmd+P`) and search for **"FlashTags: Generate Tags"**.
-3. **Watch the Magic**: 
-   - A notification ("⚡ FlashTags: Generating...") appears.
-   - Your note's Frontmatter/Header is automatically updated with smart tags.
+FlashTags provides three specialized commands to help you organize your vault:
+
+1. **FlashTags: Generate Tags**
+   - Identifies 3-6 relevant technical tags and merges them into your note's metadata.
+2. **FlashTags: Generate Summary**
+   - Analyzes your content and creates a concise 1-sentence summary in the YAML header.
+3. **FlashTags: Generate Metadata (Tags + Summary)**
+   - The "all-in-one" command to fully populate your note's metadata in one go.
+
+**To run a command:**
+- Press `Ctrl+P` (or `Cmd+P` on Mac) and search for **"FlashTags"**.
+- Select your desired command and hit Enter.
 
 ---
 
